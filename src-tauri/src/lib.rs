@@ -6,7 +6,7 @@ use std::{
 };
 
 use tauri::State;
-use enigo::{Enigo, Mouse, Keyboard, Direction, Button, Key};
+use enigo::{Enigo, Direction, Button, Key, Coordinate};
 use once_cell::sync::Lazy;
 
 // ==========================================
@@ -47,7 +47,9 @@ static OVERLAY_MANAGER: Lazy<OverlayManager> = Lazy::new(OverlayManager::new);
 #[tauri::command]
 fn mouse_move(x: i32, y: i32) -> Result<(), String> {
     let mut enigo = Enigo::new(&enigo::Settings::default()).map_err(|e| e.to_string())?;
-    enigo.mouse().move_to(x, y).map_err(|e| e.to_string())
+    enigo
+        .move_mouse(x, y, Coordinate::Abs)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -61,16 +63,16 @@ fn mouse_click(button: String) -> Result<(), String> {
         _ => return Err("Unknown mouse button".to_string()),
     };
 
-    enigo.mouse().button(btn, Direction::Click).map_err(|e| e.to_string())
+    enigo.button(btn, Direction::Click).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn key_press(text: String) -> Result<(), String> {
     let mut enigo = Enigo::new(&enigo::Settings::default()).map_err(|e| e.to_string())?;
-    let keyboard = enigo.keyboard();
 
     for ch in text.chars() {
-        keyboard.key(Key::Layout(ch), Direction::Click).map_err(|e| e.to_string())?;
+        // Send each character
+        enigo.key(Key::Unicode(ch), Direction::Click).map_err(|e| e.to_string())?;
     }
 
     Ok(())
@@ -87,7 +89,7 @@ mod macos_overlay {
         NSApp, NSApplication, NSBackingStoreType, NSColor, NSView, NSWindow, NSWindowStyleMask,
     };
     use cocoa::base::{id, nil};
-    use cocoa::foundation::{NSAutoreleasePool, NSRect, NSSize, NSPoint};
+    use cocoa::foundation::{NSAutoreleasePool, NSRect};
     use objc::{class, msg_send, sel, sel_impl};
 
     pub fn create_privacy_overlay() -> Result<*mut c_void, String> {
@@ -97,13 +99,15 @@ mod macos_overlay {
             let app: id = NSApp();
             app.activateIgnoringOtherApps_(true);
 
-            let screen_frame: NSRect = msg_send![class!(NSScreen), mainScreen];
+            let screen: id = msg_send![class!(NSScreen), mainScreen];
+            let frame: NSRect = msg_send![screen, frame];
+
             let window: id = msg_send![class!(NSWindow), alloc];
             let style_mask = NSWindowStyleMask::NSBorderlessWindowMask;
 
             let overlay: id = window
                 .initWithContentRect_styleMask_backing_defer_(
-                    screen_frame,
+                    frame,
                     style_mask,
                     NSBackingStoreType::NSBackingStoreBuffered,
                     false,
@@ -112,11 +116,10 @@ mod macos_overlay {
             overlay.setBackgroundColor_(NSColor::colorWithCalibratedRed_green_blue_alpha_(
                 nil, 0.0, 0.0, 0.0, 0.6,
             ));
-            overlay.setLevel_(i32::MAX);
+            overlay.setLevel_((i32::MAX as i64)); // fixed type
             overlay.makeKeyAndOrderFront_(nil);
 
-            let ptr = overlay as *mut c_void;
-            Ok(ptr)
+            Ok(overlay as *mut c_void)
         }
     }
 
