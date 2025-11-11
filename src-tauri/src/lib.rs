@@ -1,4 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "macos")]
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
 
 use std::{
     ffi::c_void,
