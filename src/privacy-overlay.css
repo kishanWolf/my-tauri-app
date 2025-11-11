@@ -1,0 +1,92 @@
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #000000;
+    overflow: hidden;
+    user-select: none;
+    pointer-events: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Additional styles to ensure the overlay is properly excluded from screen capture */
+body, html {
+    /* Ensure the overlay is not recorded in screen captures */
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+    
+    /* Additional properties to help with screen capture exclusion */
+    isolation: isolate;
+}
+
+/* Make sure the overlay doesn't interfere with screen recording */
+body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.01);
+    pointer-events: none;
+    z-index: -1;
+}
+
+/* Ensure the overlay is always on top */
+body {
+    z-index: 2147483647;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* Additional styles to help with screen capture exclusion */
+body, html {
+    /* Disable all interactions */
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    
+    /* Ensure no visual artifacts */
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    
+    /* Force hardware acceleration */
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+}
+
+/* Loading container */
+.loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-family: Arial, sans-serif;
+}
+
+/* Spinner styles */
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: white;
+    animation: spin 1s ease-in-out infinite;
+    margin-bottom: 20px;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Loading text */
+.loading-text {
+    font-size: 18px;
+    font-weight: bold;
+}
