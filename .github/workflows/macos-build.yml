@@ -21,17 +21,29 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Install dependencies
         run: |
           npm install
 
+      - name: Install Rust targets for Apple Silicon and Intel
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Build frontend
+        run: |
+          npm run build
+
       - name: Build Tauri app (macOS)
         run: |
-          npx tauri build
+          npx tauri build --verbose
 
       - name: Upload macOS build artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-app
-          path: src-tauri/target/release/bundle/macos/
+          path: |
+            src-tauri/target/release/bundle/dmg/*.dmg
+            src-tauri/target/release/bundle/macos/*.app
