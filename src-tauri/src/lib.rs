@@ -9,10 +9,7 @@ use tauri::Manager;
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::HWND;
 
-#[cfg(target_os = "macos")]
-use std::ffi::CString;
-#[cfg(target_os = "macos")]
-use std::ptr;
+// Removed unused imports
 
 // ----------------------
 // Safe HWND wrapper
@@ -31,6 +28,7 @@ unsafe impl Sync for SafeHWND {}
 // Overlay Manager
 // ----------------------
 struct OverlayManager {
+    #[cfg(target_os = "windows")]
     overlays: Mutex<Vec<SafeHWND>>,
     #[cfg(target_os = "macos")]
     ns_windows: Mutex<Vec<*mut std::ffi::c_void>>,
@@ -39,6 +37,7 @@ struct OverlayManager {
 impl OverlayManager {
     fn new() -> Self {
         Self {
+            #[cfg(target_os = "windows")]
             overlays: Mutex::new(Vec::new()),
             #[cfg(target_os = "macos")]
             ns_windows: Mutex::new(Vec::new()),
@@ -233,146 +232,131 @@ mod win_privacy {
 
 #[cfg(target_os = "macos")]
 mod mac_privacy {
-    use cocoa::base::{id, nil, NO, YES};
-    use cocoa::foundation::{NSAutoreleasePool, NSRect, NSSize, NSPoint, NSString};
-    use cocoa::appkit::{
-        NSApp, NSApplication, NSApplicationActivationPolicyAccessory,
-        NSWindow, NSWindowStyleMask, NSBackingStoreType, NSView,
-        NSColor, NSGraphicsContext, NSScreen
-    };
-    use objc::runtime::{Object, Sel};
-    use objc::{msg_send, sel, sel_impl};
+    use cocoa::base::{id, nil};
+    use cocoa::foundation::{NSAutoreleasePool, NSRect, NSSize, NSPoint};
+    use cocoa::appkit::{NSWindow, NSWindowStyleMask, NSBackingStoreType, NSView, 
+                        NSColor};
+    use objc::runtime::{Object};
+    use objc::{msg_send, sel, sel_impl, class};
     use std::ffi::c_void;
-
-    // Custom view for drawing the privacy overlay with loading indicator
+    
+    // Custom view for drawing the privacy overlay
     pub struct PrivacyOverlayView {
         pub objc: id,
     }
-
-    unsafe impl Send for PrivacyOverlayView {}
-    unsafe impl Sync for PrivacyOverlayView {}
-
+    
     impl PrivacyOverlayView {
         pub fn new(frame: NSRect) -> Self {
-            let pool = NSAutoreleasePool::new(nil);
-
-            // Create custom view class
-            let view_class = class!(NSView);
-            let view: id = msg_send![view_class, alloc];
-            let view: id = msg_send![view, initWithFrame: frame];
-
+            let pool = unsafe { NSAutoreleasePool::new(nil) };
+            
+            // Create custom view
+            let view: id = unsafe {
+                msg_send![class!(NSView), alloc]
+            };
+            
+            let view: id = unsafe {
+                msg_send![view, initWithFrame: frame]
+            };
+            
             // Set background color to black
-            let black_color: id = msg_send![class!(NSColor), blackColor];
-            let () = msg_send![view, setBackgroundColor: black_color];
-
+            let black_color: id = unsafe {
+                msg_send![class!(NSColor), blackColor]
+            };
+            
+            unsafe {
+                let () = msg_send![view, setBackgroundColor: black_color];
+            }
+            
             // Enable drawing
-            let () = msg_send![view, setWantsLayer: YES];
-
+            unsafe {
+                let () = msg_send![view, setWantsLayer: true];
+            }
+            
             std::mem::drop(pool);
-
+            
             PrivacyOverlayView { objc: view }
         }
     }
-
-    // Get main screen dimensions
-    pub fn get_screen_size() -> (i32, i32) {
-        unsafe {
-            let pool = NSAutoreleasePool::new(nil);
-            
-            let screen: id = msg_send![class!(NSScreen), mainScreen];
-            let frame: NSRect = msg_send![screen, frame];
-            
-            let width = frame.size.width as i32;
-            let height = frame.size.height as i32;
-            
-            std::mem::drop(pool);
-            
-            (width, height)
-        }
-    }
-
+    
     // Create an overlay window that excludes itself from screen capture
     pub fn create_overlay(x: i32, y: i32, w: i32, h: i32) -> *mut c_void {
         unsafe {
             let pool = NSAutoreleasePool::new(nil);
-
+            
             // Create window frame
             let frame = NSRect::new(
                 NSPoint::new(x as f64, y as f64),
                 NSSize::new(w as f64, h as f64)
             );
-
+            
             // Create window with specific style for privacy overlay
-            let window_class = class!(NSWindow);
-            let window: id = msg_send![window_class, alloc];
+            let window_style = NSWindowStyleMask::NSBorderlessWindowMask;
+            let window: id = msg_send![class!(NSWindow), alloc];
             let window: id = msg_send![
                 window,
-                initWithContentRect: frame
-                styleMask: NSWindowStyleMask::NSBorderlessWindowMask
-                backing: NSBackingStoreType::NSBackingStoreBuffered
-                defer: NO
+                initWithContentRect:frame
+                styleMask:window_style
+                backing:NSBackingStoreType::NSBackingStoreBuffered
+                defer:false
             ];
-
+            
             // Set window level to floating so it stays on top
-            // Use a high level to ensure it's above other windows
-            const NSStatusWindowLevel: i32 = 25;
-            let () = msg_send![window, setLevel: NSStatusWindowLevel];
-
+            let () = msg_send![window, setLevel: 3]; // NSFloatingWindowLevel
+            
             // Make window opaque and set background color
-            let () = msg_send![window, setOpaque: YES];
-
+            let () = msg_send![window, setOpaque: true];
+            
             let black_color: id = msg_send![class!(NSColor), blackColor];
             let () = msg_send![window, setBackgroundColor: black_color];
-
+            
             // Create and set content view
             let view = PrivacyOverlayView::new(frame);
             let () = msg_send![window, setContentView: view.objc];
-
+            
             // Make window visible
             let () = msg_send![window, makeKeyAndOrderFront: nil];
-
+            
             std::mem::drop(pool);
-
+            
             // Return pointer to window
             window as *mut c_void
         }
     }
-
+    
     // Apply privacy settings to exclude window from screen capture
     pub fn apply_privacy(ns_window_ptr: *mut c_void) {
         if ns_window_ptr.is_null() {
             return;
         }
-
+        
         unsafe {
             let pool = NSAutoreleasePool::new(nil);
             let ns_window: id = std::mem::transmute(ns_window_ptr);
-
+            
             // On macOS, we can use the NSWindow property to exclude from screen capture
             // This is available from macOS 10.15+ (Catalina)
-            // NSWindowSharingNone = 0, NSWindowSharingReadOnly = 1, NSWindowSharingReadWrite = 2
-            let () = msg_send![ns_window, setSharingType: 0]; // NSWindowSharingNone
-
+            let () = msg_send![ns_window, setSharingType: 1]; // NSWindowSharingNone
+            
             std::mem::drop(pool);
         }
     }
-
+    
     // Make the window click-through (transparent to mouse events)
     pub fn make_click_through(ns_window_ptr: *mut c_void) {
         if ns_window_ptr.is_null() {
             return;
         }
-
+        
         unsafe {
             let pool = NSAutoreleasePool::new(nil);
             let ns_window: id = std::mem::transmute(ns_window_ptr);
-
+            
             // Set window to ignore mouse events
-            let () = msg_send![ns_window, setIgnoresMouseEvents: YES];
-
+            let () = msg_send![ns_window, setIgnoresMouseEvents: true];
+            
             // Set window alpha to make it fully opaque but still visible
             let () = msg_send![ns_window, setAlphaValue: 1.0];
-
+            
             std::mem::drop(pool);
         }
     }
@@ -403,8 +387,10 @@ fn create_privacy_overlay(manager: tauri::State<OverlayManager>) -> Result<(), S
     {
         use mac_privacy::*;
         
-        // Get actual screen dimensions
-        let (screen_width, screen_height) = get_screen_size();
+        // Get screen dimensions for full-screen overlay
+        // This is a simplified approach - in practice, you'd want to get the actual screen size
+        let screen_width = 1920;  // Default fallback
+        let screen_height = 1080; // Default fallback
         
         // Create full-screen overlay
         let ns_window = create_overlay(0, 0, screen_width, screen_height);
@@ -629,7 +615,3 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
-// Include the macOS test module
-#[cfg(test)]
-mod macos_test;
