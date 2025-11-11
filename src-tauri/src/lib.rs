@@ -6,7 +6,7 @@ use std::{
 };
 
 use tauri::State;
-use enigo::{Enigo, Direction, Button, Key, Coordinate};
+use enigo::{Enigo, MouseControllable, KeyboardControllable, MouseButton, Key};
 use once_cell::sync::Lazy;
 
 // ==========================================
@@ -46,33 +46,32 @@ static OVERLAY_MANAGER: Lazy<OverlayManager> = Lazy::new(OverlayManager::new);
 
 #[tauri::command]
 fn mouse_move(x: i32, y: i32) -> Result<(), String> {
-    let mut enigo = Enigo::new(&enigo::Settings::default()).map_err(|e| e.to_string())?;
-    enigo
-        .move_mouse(x, y, Coordinate::Abs)
-        .map_err(|e| e.to_string())
+    let mut enigo = Enigo::new();
+    enigo.mouse_move_to(x, y);
+    Ok(())
 }
 
 #[tauri::command]
 fn mouse_click(button: String) -> Result<(), String> {
-    let mut enigo = Enigo::new(&enigo::Settings::default()).map_err(|e| e.to_string())?;
+    let mut enigo = Enigo::new();
 
     let btn = match button.to_lowercase().as_str() {
-        "left" => Button::Left,
-        "right" => Button::Right,
-        "middle" => Button::Middle,
+        "left" => MouseButton::Left,
+        "right" => MouseButton::Right,
+        "middle" => MouseButton::Middle,
         _ => return Err("Unknown mouse button".to_string()),
     };
 
-    enigo.button(btn, Direction::Click).map_err(|e| e.to_string())
+    enigo.mouse_click(btn);
+    Ok(())
 }
 
 #[tauri::command]
 fn key_press(text: String) -> Result<(), String> {
-    let mut enigo = Enigo::new(&enigo::Settings::default()).map_err(|e| e.to_string())?;
+    let mut enigo = Enigo::new();
 
     for ch in text.chars() {
-        // Send each character
-        enigo.key(Key::Unicode(ch), Direction::Click).map_err(|e| e.to_string())?;
+        enigo.key_click(Key::Layout(ch));
     }
 
     Ok(())
@@ -116,7 +115,7 @@ mod macos_overlay {
             overlay.setBackgroundColor_(NSColor::colorWithCalibratedRed_green_blue_alpha_(
                 nil, 0.0, 0.0, 0.0, 0.6,
             ));
-            overlay.setLevel_((i32::MAX as i64)); // fixed type
+            overlay.setLevel_((i32::MAX as i64)); // fixed type for macOS
             overlay.makeKeyAndOrderFront_(nil);
 
             Ok(overlay as *mut c_void)
